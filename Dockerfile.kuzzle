@@ -1,0 +1,6 @@
+FROM kuzzleio/kuzzle:2.24.0
+
+# Create the log file and set full permissions
+RUN touch /var/log/kuzzle.log && chmod 777 /var/log/kuzzle.log
+
+CMD ["kuzzle", "start"]

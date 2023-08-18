@@ -1,0 +1,86 @@
+version: '3.7'
+name: kuzzle-file-logging
+services:
+  kuzzle:
+    build:
+      context: .
+      dockerfile: Dockerfile.kuzzle
+    restart: always
+    ports:
+      - "7514:7512"
+      - "1884:1883"
+    cap_add:
+      - SYS_PTRACE
+    networks:
+      - kuzzle-network-file-logging
+    depends_on:
+      - redis
+      - elasticsearch
+    healthcheck:
+      test: curl -f http://localhost:7512 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: ${KUZZLE_RESOURCES_LIMITS_CPUS:-1}
+          memory: ${KUZZLE_RESOURCES_LIMITS_MEMORY:-2G}
+        reservations:
+          cpus: ${KUZZLE_RESOURCES_RESERVATIONS_CPUS:-0.5}
+          memory: ${KUZZLE_RESOURCES_RESERVATIONS_MEMORY:-1G} 
+    environment:
+      - kuzzle_services__storageEngine__client__node=http://elasticsearch:9200
+      - kuzzle_services__internalCache__node__host=redis
+      - kuzzle_services__memoryStorage__node__host=redis
+      - kuzzle_server__protocols__mqtt__enabled=true
+      - kuzzle_server__maxRequestSize=${KUZZLE_SERVER_MAX_REQUEST_SIZE:-5mb}
+      - kuzzle_limits__concurrentRequests=${KUZZLE_LIMITS_CONCURRENT_REQUESTS:-1000}
+      - kuzzle_cluster__heartbeat=${KUZZLE_CLUSTER_HEARTBEAT:-5000}
+      - kuzzle_server__logs__transports='*json:[{"transport":"file","level":"info","filename":"/var/log/kuzzle.log","maxsize":10485760,"maxFiles":3}]'
+      - kuzzle_server__logs__accessLogFormat=combined
+      - kuzzle_server__logs__accessLogIpOffset=0
+      - NODE_ENV=production
+
+  redis:
+    image: redis:5
+    deploy:
+      resources:
+        limits:
+          cpus: ${REDIS_RESOURCES_LIMITS_CPUS:-0.5}
+          memory: ${REDIS_RESOURCES_LIMITS_MEMORY:-1G}
+        reservations:
+          cpus: ${REDIS_RESOURCES_RESERVATIONS_CPUS:-0.25}
+          memory: ${REDIS_RESOURCES_RESERVATIONS_MEMORY:-1G}
+    networks:
+      - kuzzle-network-file-logging
+
+  elasticsearch:
+    image: kuzzleio/elasticsearch:7.16.2
+    restart: on-failure
+    ulimits:
+      nofile: 65536
+    healthcheck:
+      test: curl -f http://localhost:9200 || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: ${ELASTICSEARCH_RESOURCES_LIMITS_CPUS:-1}
+          memory: ${ELASTICSEARCH_RESOURCES_LIMITS_MEMORY:-2G}
+        reservations:
+          cpus: ${ELASTICSEARCH_RESOURCES_RESERVATIONS_CPUS:-0.25}
+          memory: ${ELASTICSEARCH_RESOURCES_RESERVATIONS_MEMORY:-512M}  
+    # volumes:
+    #   - "./eskuzzledata:/usr/share/elasticsearch/data" 
+    networks:
+      - kuzzle-network-file-logging
+
+networks:
+  kuzzle-network-file-logging:
+    name: kuzzle-network-file-logging
+    driver: bridge
